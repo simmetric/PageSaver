@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+    <head>
+        <script type="text/javascript" src="options.js"></script>
+        <style type="text/css">
+            div.input {
+                margin-left: 1em;
+            }
+        </style>
+        <title>Page saver options</title>
+    </head>
+    <body>
+        <h1>Page saver options</h1>
+
+        <div class="input">
+            <input type="checkbox" id="chkInlineJs" checked>
+            <label for="chkInlineJs">Inline JavaScript files</label>
+        </div>
+        <br>
+        
+        <div class="input">
+            <input type="checkbox" id="chkInlineCss" checked>
+            <label for="chkInlineCss">Inline CSS files</label>
+
+            <div class="input">
+                    <input type="checkbox" id="chkDeepInlineCss" checked>
+                    <label for="chkDeepInlineCss">Inline content inside CSS files (recursively)</label>
+            </div>
+        </div>
+        <br>
+
+        <div class="input">
+            <input type="checkbox" id="chkInlineImg" checked>
+            <label for="chkInlineImg">Inline image files</label>
+        </div>
+        <br>
+
+        <div class="input">
+            Timeout
+            <input id="nmbTimeout" type="number" placeholder="0.00" style="width: 5em; text-align: right;">
+            in ms
+            <br>
+            This will stop all inlining and just save whatever is inlined when the timeout is reached.
+        </div>
+        <br>
+
+        <div class="input">
+            <input type="checkbox" id="chkAddTimestamp" checked>
+            <label for="chkAddTimestamp">Add timestamp to page head</label>
+        </div>
+    </body>
+</html>
