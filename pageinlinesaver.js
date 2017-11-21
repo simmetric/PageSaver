@@ -1,6 +1,5 @@
 var pageInlineSaver = (function () {
     "use strict";
-    var pageSource;
     var errorText;
     var foundInlinables = 0;
     var initiatedInlines = 0;
@@ -33,13 +32,14 @@ var pageInlineSaver = (function () {
             }
             node = node.nextSibling;
         }
-        pageSource = html;
+        return html;
     }
 
     function inlineResources() {
-
+        var timeout;
         if (options.timeout > 0) {
-            setTimeout(() => {
+            timeout = setTimeout(() => {
+                console.log("Timeout reached: saving page with " + initiatedInlines - completedInlines + " inlines left unfinished out of " + foundInlinables + " found inlinables");
                 this.saveFile();
             }, options.timeout)
         }
@@ -58,7 +58,7 @@ var pageInlineSaver = (function () {
             foundInlinables += imgTags.length;
         }
 
-        console.log("Inlining " + foundInlinables + " external resources");
+        console.debug("Inlining " + foundInlinables + " external resources");
         
         if (options.deepInlineCss) {
             //inline stylesheet internal content
@@ -117,51 +117,14 @@ var pageInlineSaver = (function () {
             }        
             catch(error) {
                 console.error(error);
+                clearTimeout(timeout);
                 saveFile();
             }
         }
         else {
             //nothing left to inline, call saveFile
+            clearTimeout(timeout);
             saveFile();
-        }
-    }
-
-    //find elements by name and filter by given expression
-    function findElements(tagName, filter) {
-        var elements = document.getElementsByTagName(tagName);
-        var filteredElements = [];
-        for (var i = 0; i < elements.length; i++) {
-            if (filter == null || (typeof(filter) == 'function' && filter(elements[i]))) {
-                filteredElements.push(elements[i]);
-            }
-        }
-
-        return filteredElements;
-    }
-
-    function downloadResource(config, callback, isBinary) {
-        initiatedInlines++;
-        console.log("Inlining " + config.url)
-
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.responseType = isBinary ? "arraybuffer" : "text";
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    var contentType = this.getResponseHeader("content-type");
-                    callback(
-                        config.srcElement,
-                        config.resourceDeclaration,
-                        xhr.response,
-                        contentType);
-                }
-            };
-            xhr.open("GET", config.url);
-            xhr.send();
-        }
-        catch (error) {
-            console.error(error);
-            completedInline();
         }
     }
 
@@ -206,7 +169,7 @@ var pageInlineSaver = (function () {
 
     function inlineStylesheetInternal(content, srcElement) {
         var baseUrl = srcElement.getAttribute("href");
-        //search CSS for url() occurrences and inline them. they will be replaced in pageSource
+        //search CSS for url() occurrences and inline them. they will be replaced in the page source
         var urlPattern = /url\("?'?([ a-zA-Z0-9:\-\.\\\/_&?=@]+)"?'?\)/gi;
         var match = urlPattern.exec(content);
         while (match) {
@@ -266,7 +229,7 @@ var pageInlineSaver = (function () {
 
     function inlineStylesheetImport(srcElement, importDeclaration, content, contentType) {
         srcElement.innerHTML = srcElement.innerHTML.replace(importDeclaration, function () { return content; });
-        inlineStylesheetInternal(srcElement.innerHTML);
+        inlineStylesheetInternal(srcElement.innerHTML, srcElement);
         completedInline();
     }
 
@@ -284,7 +247,7 @@ var pageInlineSaver = (function () {
                 }
 
                 var imgData = btoa(converted.join(""));
-                console.log(imgData.length);
+                console.debug(imgData.length);
                 return "data:" + contentType + ";base64," + imgData;
             }
             else {
@@ -294,6 +257,45 @@ var pageInlineSaver = (function () {
         catch (error) {
             console.error(error);
             saveFile();
+        }
+    }
+
+    //find elements by name and filter by given expression
+    function findElements(tagName, filter) {
+        var elements = document.getElementsByTagName(tagName);
+        var filteredElements = [];
+        for (var i = 0; i < elements.length; i++) {
+            if (filter == null || (typeof (filter) == 'function' && filter(elements[i]))) {
+                filteredElements.push(elements[i]);
+            }
+        }
+
+        return filteredElements;
+    }
+
+    function downloadResource(config, callback, isBinary) {
+        initiatedInlines++;
+        console.debug("Inlining " + config.url)
+
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.responseType = isBinary ? "arraybuffer" : "text";
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState == 4 && xhr.status == 200) {
+                    var contentType = this.getResponseHeader("content-type");
+                    callback(
+                        config.srcElement,
+                        config.resourceDeclaration,
+                        xhr.response,
+                        contentType);
+                }
+            };
+            xhr.open("GET", config.url);
+            xhr.send();
+        }
+        catch (error) {
+            console.error(error);
+            completedInline();
         }
     }
 
@@ -323,7 +325,7 @@ var pageInlineSaver = (function () {
 
     function saveFile() {
         stopInlining = true;
-        pageInlineSaver.DOMtoString(document);
+        var pageSource = pageInlineSaver.DOMtoString(document);
 
         chrome.runtime.sendMessage({
             "action": "saveFile",
@@ -350,9 +352,9 @@ var pageInlineSaver = (function () {
     return {
         insertTimestamp: insertTimestamp,
         setBaseLink: setBaseLink,
-        DOMtoString: DOMtoString,
         inlineResources: inlineResources,
-        saveFile: saveFile
+        saveFile: saveFile,
+        DOMtoString: DOMtoString
     };
 })();
 

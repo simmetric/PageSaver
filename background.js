@@ -36,7 +36,7 @@ function saveInlinedPage() {
 function saveFile(request) {
     endActivity();
     var blob = new Blob(["\ufeff", request.source], { encoding: "UTF-8", type: "text/html;charset=utf-8" });
-    var urlParts = decodeURIComponent(request.url).replace("http://", "").replace("https://", "").split(/[\.\/\\:\?&=\[\]\|]/);
+    var urlParts = decodeURIComponent(request.url).replace("http://", "").replace("https://", "").split(/[\.\/\\:\?&=\[\]\|~]/);
     var fileNameParts = [];
     for (var i = 0; i < urlParts.length; i++) {
         if (urlParts[i] && urlParts[i].length > 0) {
@@ -44,6 +44,7 @@ function saveFile(request) {
         }
     }
     var fileName = fileNameParts.join("-");
+    console.debug(fileName);
 
     chrome.downloads.download({
         url: URL.createObjectURL(blob),
