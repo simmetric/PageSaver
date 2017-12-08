@@ -63,7 +63,7 @@ function endActivity() {
 }
 
 function indicateActivity() {
-    if(chrome.browserAction != undefined) {
+    if(chrome.browserAction !== undefined) {
         if (isActive) {
             chrome.browserAction.setIcon({ path: "img/activity" + animationIndex + ".png" })
             if (++animationIndex > 3) {
@@ -80,7 +80,7 @@ function indicateActivity() {
 function getOption(name, defaultValue) {
     try {
         var value = window.localStorage.getItem(name);
-        if (typeof value != "undefined" && value != null) {
+        if (typeof value !== "undefined" && value !== null) {
             return value;
         }
         
@@ -95,12 +95,12 @@ function getOption(name, defaultValue) {
 
 function getOptions() {
     return {
-        inlineJs : getOption("inlineJs", "true") == "true",
-        inlineCss : getOption("inlineCss", "true") == "true",
-        deepInlineCss : getOption("deepInlineCss", "true") == "true",
-        inlineImg : getOption("inlineImg", "true") == "true",
+        inlineJs : getOption("inlineJs", "true") === "true",
+        inlineCss : getOption("inlineCss", "true") === "true",
+        deepInlineCss : getOption("deepInlineCss", "true") === "true",
+        inlineImg : getOption("inlineImg", "true") === "true",
         timeout : getOption("timeout", 30000),
-        addTimestamp : getOption("addTimestamp", "true") == "true"
+        addTimestamp : getOption("addTimestamp", "true") === "true"
     };
 }
 

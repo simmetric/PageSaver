@@ -39,31 +39,31 @@ var pageInlineSaver = (function () {
         var timeout;
         if (options.timeout > 0) {
             timeout = setTimeout(() => {
-                console.log("Timeout reached: saving page with " + initiatedInlines - completedInlines + " inlines left unfinished out of " + foundInlinables + " found inlinables");
+                pageInlineSaver.handleMessage("Timeout reached: saving page with " + (initiatedInlines - completedInlines) + " inlines left unfinished out of " + foundInlinables + " found inlinables");
                 this.saveFile();
             }, options.timeout)
         }
-
+        
         //find all <link rel="stylesheet">, <style>, <script src=?> and <img src=> tags
         if (options.inlineCss) {
-            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") == "stylesheet" });
-            foundInlinables += linkTags.length;
+            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet" });
+            pageInlineSaver.increaseFoundInlineables(foundInlinables + linkTags.length);
         }
         if (options.inlineJs) {
             var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src") });
-            foundInlinables += scriptTags.length;
+            pageInlineSaver.increaseFoundInlineables(foundInlinables + scriptTags.length);
         }
         if (options.inlineImg) {
-            var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") != null });
-            foundInlinables += imgTags.length;
+            var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null });
+            pageInlineSaver.increaseFoundInlineables(foundInlinables + imgTags.length);
         }
 
-        console.debug("Inlining " + foundInlinables + " external resources");
+        pageInlineSaver.handleMessage("Inlining " + foundInlinables + " external resources");
         
         if (options.deepInlineCss) {
             //inline stylesheet internal content
             var styleTags = findElements("style");
-            for (var i = 0; i < styleTags.length; i++) {
+            for (let i = 0; i < styleTags.length; i++) {
                 inlineStylesheetInternal(styleTags[i].innerText, document.getElementsByTagName("base")[0]);
             }
         }
@@ -71,7 +71,7 @@ var pageInlineSaver = (function () {
         if (foundInlinables > 0) {
             try {
                 if (options.inlineCss) {
-                    for (var i = 0; i < linkTags.length; i++) {
+                    for (let i = 0; i < linkTags.length; i++) {
                         //retrieve external file and inline into new <style> tag
                         var url = linkTags[i].getAttribute("href");
 
@@ -116,7 +116,7 @@ var pageInlineSaver = (function () {
                 }
             }        
             catch(error) {
-                console.error(error);
+                pageInlineSaver.handleError(error);
                 clearTimeout(timeout);
                 saveFile();
             }
@@ -184,7 +184,7 @@ var pageInlineSaver = (function () {
                     url = relativeUrlToAbsolute(baseUrl, url);
                 }
 
-                foundInlinables++;
+                pageInlineSaver.increaseFoundInlineables(foundInlinables++);
                 downloadResource({
                         url: url,
                         resourceDeclaration: match[0],
@@ -209,7 +209,7 @@ var pageInlineSaver = (function () {
                 url = relativeUrlToAbsolute(baseUrl, url);
             }
 
-            foundInlinables++;
+            pageInlineSaver.increaseFoundInlineables(foundInlinables++);
             downloadResource({
                     url: url,
                     resourceDeclaration: match[0],
@@ -255,7 +255,7 @@ var pageInlineSaver = (function () {
             }
         }
         catch (error) {
-            console.error(error);
+            pageInlineSaver.handleError(error);
             saveFile();
         }
     }
@@ -294,7 +294,7 @@ var pageInlineSaver = (function () {
             xhr.send();
         }
         catch (error) {
-            console.error(error);
+            pageInlineSaver.handleError(error);
             completedInline();
         }
     }
@@ -324,14 +324,26 @@ var pageInlineSaver = (function () {
     }
 
     function saveFile() {
-        stopInlining = true;
-        var pageSource = pageInlineSaver.DOMtoString(document);
+        if (!stopInlining) {
+            stopInlining = true;
 
-        chrome.runtime.sendMessage({
-            "action": "saveFile",
-            "source": pageSource,
-            "url": window.location.href
-        });
+            var infoPanel = document.getElementById("SimmetricPageSaverInfoPanel");
+            infoPanel.parentElement.removeChild(infoPanel);
+            var dimmer = document.getElementById("SimmetricPageSaverDimmer");
+            dimmer.parentElement.removeChild(dimmer);
+            var counter = document.getElementById("SimmetricPageSaverInlineableCounter");
+            counter.parentElement.removeChild(counter);
+            var stopButton = document.getElementById("SimmetricPageSaverStopButton");
+            stopButton.parentElement.removeChild(stopButton);
+
+            var pageSource = pageInlineSaver.DOMtoString(document);
+
+            chrome.runtime.sendMessage({
+                "action": "saveFile",
+                "source": pageSource,
+                "url": window.location.href
+            });
+        }
     }
 
     function setBaseLink() {
@@ -349,16 +361,61 @@ var pageInlineSaver = (function () {
         document.head.appendChild(meta);
     }
 
+    function handleError(error) {
+        document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += "<span style=\"color: #a00;\">An error occurred! Press Control+Shift+J to see what it is.</span><br>";
+        console.error(error);
+    }
+
+    function handleMessage(message) {
+        document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += message + "<br>";
+    }
+
+    function increaseFoundInlineables(newValue) {
+        document.getElementById("SimmetricPageSaverInlineableCounter").innerText = newValue;
+        this.foundInlinables = newValue;
+    }
+
     return {
         insertTimestamp: insertTimestamp,
         setBaseLink: setBaseLink,
         inlineResources: inlineResources,
         saveFile: saveFile,
-        DOMtoString: DOMtoString
+        DOMtoString: DOMtoString,
+        handleError: handleError,
+        handleMessage: handleMessage,
+        increaseFoundInlineables: increaseFoundInlineables
     };
 })();
 
 try {
+    var dimmer = document.createElement("div");
+    dimmer.id = "SimmetricPageSaverDimmer";
+    dimmer.setAttribute("style", "position: fixed; z-index: 9998; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; opacity: 0.8");
+    document.getElementsByTagName("body")[0].appendChild(dimmer);
+
+    var infoPanel = document.createElement("div")
+    infoPanel.id = "SimmetricPageSaverInfoPanel";
+    infoPanel.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 25%; width: 75%; height: 100%; color: #fff; text-align: left; font-size: 14pt;");
+    document.getElementsByTagName("body")[0].appendChild(infoPanel);
+
+    var inlineableCounter = document.createElement("div");
+    inlineableCounter.id = "SimmetricPageSaverInlineableCounter";
+    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right;");
+    document.getElementsByTagName("body")[0].appendChild(inlineableCounter);
+
+    var stopButton = document.createElement("button");
+    stopButton.id = "SimmetricPageSaverStopButton";
+    stopButton.onclick = pageInlineSaver.saveFile;
+    stopButton.setAttribute("style", "position: fixed; z-index: 9999; left: 0; bottom: 0; width: 200px; height: 80px; background-color: #a66; color: $fff;");
+    stopButton.innerText = "Interrupt and save page now";
+    document.getElementsByTagName("body")[0].appendChild(stopButton);
+
+    pageInlineSaver.handleMessage("Inlining page...");
+
+    if (options.timeout > 0) {
+        pageInlineSaver.handleMessage("Timeout set to " + (options.timeout / 1000) + " seconds.");
+    }
+
     if (options.addTimestamp) {
         pageInlineSaver.insertTimestamp();
     }
@@ -366,5 +423,5 @@ try {
     pageInlineSaver.inlineResources();
 }
 catch (error) {
-    console.error(error);
+    pageInlineSaver.handleError(error);
 }
