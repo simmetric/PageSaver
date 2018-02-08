@@ -5,7 +5,8 @@
   "description": "Saves the current web page as one file with all external dependencies (style, script, images) downloaded and inlined",
   "version": "1.3.0",
   "browser_action": {
-    "default_icon": "img/icon128.png"
+    "default_icon": "img/icon128.png",
+    "default_popup":  "info.html"
   },
   "background": {
     "scripts": [ "background.js" ]

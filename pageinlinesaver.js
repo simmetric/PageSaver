@@ -1,10 +1,5 @@
 var pageInlineSaver = (function () {
     "use strict";
-    var errorText;
-    var foundInlinables = 0;
-    var initiatedInlines = 0;
-    var completedInlines = 0;
-    var stopInlining = false;
     
     // @author Rob W <http://stackoverflow.com/users/938089/rob-w>
     // Demo: var serialized_html = DOMtoString(document);
@@ -39,47 +34,47 @@ var pageInlineSaver = (function () {
         var timeout;
         if (options.timeout > 0) {
             timeout = setTimeout(() => {
-                pageInlineSaver.handleMessage("Timeout reached: saving page with " + (initiatedInlines - completedInlines) + " inlines left unfinished out of " + foundInlinables + " found inlinables");
-                this.saveFile();
+                pageInlineSaver.handleMessage("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
+                pageInlineSaver.saveFile();
             }, options.timeout)
         }
         
         //find all <link rel="stylesheet">, <style>, <script src=?> and <img src=> tags
         if (options.inlineCss) {
             var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet" });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + linkTags.length);
+            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + linkTags.length);
         }
         if (options.inlineJs) {
             var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src") });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + scriptTags.length);
+            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + scriptTags.length);
         }
         if (options.inlineImg) {
             var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + imgTags.length);
+            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + imgTags.length);
         }
 
-        pageInlineSaver.handleMessage("Inlining " + foundInlinables + " external resources");
+        pageInlineSaver.handleMessage("Inlining " + this.foundInlinables + " external resources");
         
         if (options.deepInlineCss) {
             //inline stylesheet internal content
             var styleTags = findElements("style");
             for (let i = 0; i < styleTags.length; i++) {
-                inlineStylesheetInternal(styleTags[i].innerText, document.getElementsByTagName("base")[0]);
+                pageInlineSaver.inlineStylesheetInternal(styleTags[i].innerText, document.getElementsByTagName("base")[0]);
             }
         }
 
-        if (foundInlinables > 0) {
+        if (this.foundInlinables > 0) {
             try {
                 if (options.inlineCss) {
                     for (let i = 0; i < linkTags.length; i++) {
                         //retrieve external file and inline into new <style> tag
                         var url = linkTags[i].getAttribute("href");
 
-                        downloadResource({
+                        pageInlineSaver.downloadResource({
                                 url: url,
                                 resourceDeclaration: linkTags[i]
                             },
-                            inlineStylesheet,
+                            pageInlineSaver.inlineStylesheet,
                             false);
                     }
                 }
@@ -89,11 +84,11 @@ var pageInlineSaver = (function () {
                         //retrieve external file and inline into new <script> tag without src attribute
                         var url = scriptTags[i].getAttribute("src");
 
-                        downloadResource({
+                        pageInlineSaver.downloadResource({
                                 url: url,
                                 resourceDeclaration: scriptTags[i]
                             },
-                            inlineScript,
+                            pageInlineSaver.inlineScript,
                             false);
                     }
                 }
@@ -103,28 +98,28 @@ var pageInlineSaver = (function () {
                         var url = imgTags[i].getAttribute("src");
                         if (!url.startsWith("data:")) {
                             //retrieve external image and create data URI
-                            downloadResource({
+                            pageInlineSaver.downloadResource({
                                     url: url,
                                     resourceDeclaration: imgTags[i]
                                 },
-                                inlineImage,
+                                pageInlineSaver.inlineImage,
                                 true);
                         } else {
-                            completedInline();
+                            pageInlineSaver.completedInline();
                         }
                     }
                 }
             }        
             catch(error) {
                 pageInlineSaver.handleError(error);
-                clearTimeout(timeout);
-                saveFile();
+                pageInlineSaver.clearTimeout(timeout);
+                pageInlineSaver.saveFile();
             }
         }
         else {
             //nothing left to inline, call saveFile
-            clearTimeout(timeout);
-            saveFile();
+            pageInlineSaver.clearTimeout(timeout);
+            pageInlineSaver.saveFile();
         }
     }
 
@@ -136,14 +131,14 @@ var pageInlineSaver = (function () {
         resourceDeclaration.removeAttribute("src");
         resourceDeclaration.innerHTML = content;
 
-        completedInline();
+        pageInlineSaver.completedInline();
     }
 
     function inlineImage(srcElement, resourceDeclaration, content, contentType) {
         //replace src attribute with base64 encoded image
-        resourceDeclaration.setAttribute("src", getImageAsDataUrl(content, contentType));
+        resourceDeclaration.setAttribute("src", pageInlineSaver.getImageAsDataUrl(content, contentType));
 
-        completedInline();
+        pageInlineSaver.completedInline();
     }
 
     function inlineStylesheet(srcElement, resourceDeclaration, content, contentType) {
@@ -160,11 +155,11 @@ var pageInlineSaver = (function () {
 
         //inline internal content (url() and @import)
         if (options.deepInlineCss) {
-            inlineStylesheetInternal(content, newElement);
+            pageInlineSaver.inlineStylesheetInternal(content, newElement);
         }
 
         //signal completedInline for stylesheet
-        completedInline();
+        pageInlineSaver.completedInline();
     }
 
     function inlineStylesheetInternal(content, srcElement) {
@@ -184,13 +179,13 @@ var pageInlineSaver = (function () {
                     url = relativeUrlToAbsolute(baseUrl, url);
                 }
 
-                pageInlineSaver.increaseFoundInlineables(foundInlinables++);
-                downloadResource({
+                pageInlineSaver.increaseFoundInlineables(this.foundInlinables++);
+                pageInlineSaver.downloadResource({
                         url: url,
                         resourceDeclaration: match[0],
                         srcElement: srcElement
                     },
-                    inlineStylesheetImage,
+                    pageInlineSaver.inlineStylesheetImage,
                     true);
             }
 
@@ -209,13 +204,13 @@ var pageInlineSaver = (function () {
                 url = relativeUrlToAbsolute(baseUrl, url);
             }
 
-            pageInlineSaver.increaseFoundInlineables(foundInlinables++);
-            downloadResource({
+            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables++);
+            pageInlineSaver.downloadResource({
                     url: url,
                     resourceDeclaration: match[0],
                     srcElement: srcElement
                 },
-                inlineStylesheetImport,
+                pageInlineSaver.inlineStylesheetImport,
                 false);
 
             match = urlPattern.exec(content);
@@ -223,19 +218,19 @@ var pageInlineSaver = (function () {
     }
 
     function inlineStylesheetImage(srcElement, originalUrl, content, contentType) {
-        srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + getImageAsDataUrl(content, contentType) + ")"; })
-        completedInline();
+        srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + pageInlineSaver.getImageAsDataUrl(content, contentType) + ")"; })
+        pageInlineSaver.completedInline();
     }
 
     function inlineStylesheetImport(srcElement, importDeclaration, content, contentType) {
         srcElement.innerHTML = srcElement.innerHTML.replace(importDeclaration, function () { return content; });
-        inlineStylesheetInternal(srcElement.innerHTML, srcElement);
-        completedInline();
+        pageInlineSaver.inlineStylesheetInternal(srcElement.innerHTML, srcElement);
+        pageInlineSaver.completedInline();
     }
 
     function getImageAsDataUrl(content, contentType) {
 
-        if (stopInlining) return;
+        if (this.stopInlining) return;
 
         try {
             var chunkSize = 800;
@@ -256,7 +251,7 @@ var pageInlineSaver = (function () {
         }
         catch (error) {
             pageInlineSaver.handleError(error);
-            saveFile();
+            pageInlineSaver.saveFile();
         }
     }
 
@@ -274,7 +269,7 @@ var pageInlineSaver = (function () {
     }
 
     function downloadResource(config, callback, isBinary) {
-        initiatedInlines++;
+        this.initiatedInlines++;
         console.debug("Inlining " + config.url)
 
         try {
@@ -295,7 +290,7 @@ var pageInlineSaver = (function () {
         }
         catch (error) {
             pageInlineSaver.handleError(error);
-            completedInline();
+            pageInlineSaver.completedInline();
         }
     }
 
@@ -317,15 +312,16 @@ var pageInlineSaver = (function () {
     }
 
     function completedInline() {
-        completedInlines++;
-        if (foundInlinables == initiatedInlines && initiatedInlines == completedInlines) {
-            saveFile();
+        pageInlineSaver.completedInlines++;
+        if (pageInlineSaver.foundInlinables == pageInlineSaver.initiatedInlines &&
+            pageInlineSaver.initiatedInlines == pageInlineSaver.completedInlines) {
+            pageInlineSaver.saveFile();
         }
     }
 
     function saveFile() {
-        if (!stopInlining) {
-            stopInlining = true;
+        if (!pageInlineSaver.stopInlining) {
+            pageInlineSaver.stopInlining = true;
 
             var infoPanel = document.getElementById("SimmetricPageSaverInfoPanel");
             infoPanel.parentElement.removeChild(infoPanel);
@@ -372,7 +368,7 @@ var pageInlineSaver = (function () {
 
     function increaseFoundInlineables(newValue) {
         document.getElementById("SimmetricPageSaverInlineableCounter").innerText = newValue;
-        this.foundInlinables = newValue;
+        pageInlineSaver.foundInlinables = newValue;
     }
 
     return {
@@ -383,7 +379,21 @@ var pageInlineSaver = (function () {
         DOMtoString: DOMtoString,
         handleError: handleError,
         handleMessage: handleMessage,
-        increaseFoundInlineables: increaseFoundInlineables
+        increaseFoundInlineables: increaseFoundInlineables,
+        downloadResource: downloadResource,
+        inlineImage: inlineImage,
+        inlineScript: inlineScript,
+        inlineStylesheet: inlineStylesheet,
+        inlineStylesheetImage: inlineStylesheetImage,
+        inlineStylesheetImport: inlineStylesheetImport,
+        inlineStylesheetInternal: inlineStylesheetInternal,
+        completedInline: completedInline,
+        getImageAsDataUrl: getImageAsDataUrl,
+        errorText: "",
+        foundInlinables: 0,
+        initiatedInlines: 0,
+        completedInlines: 0,
+        stopInlining: false
     };
 })();
 
@@ -400,7 +410,7 @@ try {
 
     var inlineableCounter = document.createElement("div");
     inlineableCounter.id = "SimmetricPageSaverInlineableCounter";
-    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right;");
+    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right; float: left;");
     document.getElementsByTagName("body")[0].appendChild(inlineableCounter);
 
     var stopButton = document.createElement("button");
