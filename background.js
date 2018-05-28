@@ -99,8 +99,9 @@ function getOptions() {
         inlineCss : getOption("inlineCss", "true") === "true",
         deepInlineCss : getOption("deepInlineCss", "true") === "true",
         inlineImg : getOption("inlineImg", "true") === "true",
-        timeout : getOption("timeout", 30000),
-        addTimestamp : getOption("addTimestamp", "true") === "true"
+        timeout : getOption("timeout", 30),
+        addTimestamp: getOption("addTimestamp", "true") === "true",
+        removeJs : getOption("removeJs", "false") === "true"
     };
 }
 

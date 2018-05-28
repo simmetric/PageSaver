@@ -37,8 +37,8 @@
 
         <div class="input">
             Timeout
-            <input id="nmbTimeout" type="number" placeholder="0.00" style="width: 5em; text-align: right;">
-            in ms
+            <input id="nmbTimeout" type="number" placeholder="0.00" value="30" style="width: 5em; text-align: right;">
+            in seconds
             <br>
             This will stop all inlining and just save whatever is inlined when the timeout is reached.
         </div>
@@ -47,6 +47,12 @@
         <div class="input">
             <input type="checkbox" id="chkAddTimestamp" checked>
             <label for="chkAddTimestamp">Add timestamp to page head</label>
+        </div>
+        <br>
+
+        <div class="input">
+            <input type="checkbox" id="chkRemoveJs">
+            <label for="chkRemoveJs">Remove JavaScript from page</label>
         </div>
     </body>
 </html>

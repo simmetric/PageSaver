@@ -41,24 +41,24 @@ var pageInlineSaver = (function () {
             timeout = setTimeout(() => {
                 pageInlineSaver.handleMessage("Timeout reached: saving page with " + (initiatedInlines - completedInlines) + " inlines left unfinished out of " + foundInlinables + " found inlinables");
                 this.saveFile();
-            }, options.timeout)
+            }, options.timeout * 1000)
         }
         
         //find all <link rel="stylesheet">, <style>, <script src=?> and <img src=> tags
         if (options.inlineCss) {
             var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet" });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + linkTags.length);
+            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables + linkTags.length);
         }
-        if (options.inlineJs) {
+        if (options.inlineJs || options.removeJs) {
             var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src") });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + scriptTags.length);
+            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables + scriptTags.length);
         }
         if (options.inlineImg) {
             var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null });
-            pageInlineSaver.increaseFoundInlineables(foundInlinables + imgTags.length);
+            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables + imgTags.length);
         }
 
-        pageInlineSaver.handleMessage("Inlining " + foundInlinables + " external resources");
+        pageInlineSaver.handleMessage("Inlining " + pageInlineSaver.foundInlinables + " external resources");
         
         if (options.deepInlineCss) {
             //inline stylesheet internal content
@@ -68,7 +68,7 @@ var pageInlineSaver = (function () {
             }
         }
 
-        if (foundInlinables > 0) {
+        if (pageInlineSaver.foundInlinables > 0) {
             try {
                 if (options.inlineCss) {
                     for (let i = 0; i < linkTags.length; i++) {
@@ -84,17 +84,22 @@ var pageInlineSaver = (function () {
                     }
                 }
 
-                if (options.inlineJs) {
+                if (options.inlineJs || options.removeJs) {
                     for (var i = 0; i < scriptTags.length; i++) {
-                        //retrieve external file and inline into new <script> tag without src attribute
-                        var url = scriptTags[i].getAttribute("src");
+                        if (options.inlineJs && !options.removeJs) {
+                            //retrieve external file and inline into new <script> tag without src attribute
+                            var url = scriptTags[i].getAttribute("src");
 
-                        downloadResource({
-                                url: url,
-                                resourceDeclaration: scriptTags[i]
-                            },
-                            inlineScript,
-                            false);
+                            downloadResource({
+                                    url: url,
+                                    resourceDeclaration: scriptTags[i]
+                                },
+                                inlineScript,
+                                false);
+                        }
+                        else {
+                            scriptTags[i].parentElement.removeChild(scriptTags[i]);
+                        }
                     }
                 }
 
@@ -184,7 +189,7 @@ var pageInlineSaver = (function () {
                     url = relativeUrlToAbsolute(baseUrl, url);
                 }
 
-                pageInlineSaver.increaseFoundInlineables(foundInlinables++);
+                pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables++);
                 downloadResource({
                         url: url,
                         resourceDeclaration: match[0],
@@ -209,7 +214,7 @@ var pageInlineSaver = (function () {
                 url = relativeUrlToAbsolute(baseUrl, url);
             }
 
-            pageInlineSaver.increaseFoundInlineables(foundInlinables++);
+            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables++);
             downloadResource({
                     url: url,
                     resourceDeclaration: match[0],
@@ -318,7 +323,7 @@ var pageInlineSaver = (function () {
 
     function completedInline() {
         completedInlines++;
-        if (foundInlinables == initiatedInlines && initiatedInlines == completedInlines) {
+        if (pageInlineSaver.foundInlinables == initiatedInlines && initiatedInlines == completedInlines) {
             saveFile();
         }
     }
@@ -400,7 +405,7 @@ try {
 
     var inlineableCounter = document.createElement("div");
     inlineableCounter.id = "SimmetricPageSaverInlineableCounter";
-    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right;");
+    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 150px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right;");
     document.getElementsByTagName("body")[0].appendChild(inlineableCounter);
 
     var stopButton = document.createElement("button");
@@ -412,8 +417,10 @@ try {
 
     pageInlineSaver.handleMessage("Inlining page...");
 
+    pageInlineSaver.foundInlinables = 0;
+
     if (options.timeout > 0) {
-        pageInlineSaver.handleMessage("Timeout set to " + (options.timeout / 1000) + " seconds.");
+        pageInlineSaver.handleMessage("Timeout set to " + (options.timeout) + " seconds.");
     }
 
     if (options.addTimestamp) {
