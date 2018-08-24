@@ -34,8 +34,10 @@ var pageInlineSaver = (function () {
         var timeout;
         if (options.timeout > 0) {
             timeout = setTimeout(() => {
-                pageInlineSaver.handleMessage("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
-                pageInlineSaver.saveFile();
+                if (!pageInlineSaver.stopInlining) {
+                    pageInlineSaver.handleMessage("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
+                    pageInlineSaver.saveFile();
+                }
             }, options.timeout * 1000)
         }
         
@@ -71,9 +73,9 @@ var pageInlineSaver = (function () {
                         var url = linkTags[i].getAttribute("href");
 
                         pageInlineSaver.downloadResource({
-                                url: url,
-                                resourceDeclaration: linkTags[i]
-                            },
+                            url: url,
+                            resourceDeclaration: linkTags[i]
+                        },
                             pageInlineSaver.inlineStylesheet,
                             false);
                     }
@@ -85,16 +87,17 @@ var pageInlineSaver = (function () {
                             //retrieve external file and inline into new <script> tag without src attribute
                             var url = scriptTags[i].getAttribute("src");
 
-                        pageInlineSaver.downloadResource({
+                            pageInlineSaver.downloadResource({
                                 url: url,
                                 resourceDeclaration: scriptTags[i]
                             },
-                            pageInlineSaver.inlineScript,
-                            false);
+                                pageInlineSaver.inlineScript,
+                                false);
                         }
                         else {
                             scriptTags[i].parentElement.removeChild(scriptTags[i]);
                         }
+                    }
                 }
 
                 if (options.inlineImg) {
@@ -103,9 +106,9 @@ var pageInlineSaver = (function () {
                         if (!url.startsWith("data:")) {
                             //retrieve external image and create data URI
                             pageInlineSaver.downloadResource({
-                                    url: url,
-                                    resourceDeclaration: imgTags[i]
-                                },
+                                url: url,
+                                resourceDeclaration: imgTags[i]
+                            },
                                 pageInlineSaver.inlineImage,
                                 true);
                         } else {
@@ -113,8 +116,8 @@ var pageInlineSaver = (function () {
                         }
                     }
                 }
-            }        
-            catch(error) {
+            }
+            catch (error) {
                 pageInlineSaver.handleError(error);
                 pageInlineSaver.clearTimeout(timeout);
                 pageInlineSaver.saveFile();
@@ -140,9 +143,10 @@ var pageInlineSaver = (function () {
 
     function inlineImage(srcElement, resourceDeclaration, content, contentType) {
         //replace src attribute with base64 encoded image
-        resourceDeclaration.setAttribute("src", pageInlineSaver.getImageAsDataUrl(content, contentType));
-
-        pageInlineSaver.completedInline();
+        pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
+            resourceDeclaration.setAttribute("src", dataUrl);
+            pageInlineSaver.completedInline();
+        });
     }
 
     function inlineStylesheet(srcElement, resourceDeclaration, content, contentType) {
@@ -222,8 +226,11 @@ var pageInlineSaver = (function () {
     }
 
     function inlineStylesheetImage(srcElement, originalUrl, content, contentType) {
-        srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + pageInlineSaver.getImageAsDataUrl(content, contentType) + ")"; })
-        pageInlineSaver.completedInline();
+        pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
+            srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + dataUrl + ")"; })
+            pageInlineSaver.completedInline();
+        });
+
     }
 
     function inlineStylesheetImport(srcElement, importDeclaration, content, contentType) {
@@ -232,25 +239,15 @@ var pageInlineSaver = (function () {
         pageInlineSaver.completedInline();
     }
 
-    function getImageAsDataUrl(content, contentType) {
+    function getImageAsDataUrl(content, contentType, callback) {
 
         if (this.stopInlining) return;
 
         try {
-            var chunkSize = 800;
-            if (content.byteLength > chunkSize) {
-                var uintArray = new Uint8Array(content);
-                var converted = [];
-                for (var i=0; i < uintArray.length; i += chunkSize) {
-                    converted.push(String.fromCharCode.apply(null, uintArray.subarray(i, i + chunkSize)));
-                }
-
-                var imgData = btoa(converted.join(""));
-                console.debug(imgData.length);
-                return "data:" + contentType + ";base64," + imgData;
-            }
-            else {
-                return "data:" + contentType + ";base64," + btoa(String.fromCharCode.apply(null, new Uint8Array(content)));
+            var reader = new FileReader();
+            reader.readAsDataURL(content);
+            reader.onloadend = function () {
+                callback(reader.result);
             }
         }
         catch (error) {
@@ -277,20 +274,12 @@ var pageInlineSaver = (function () {
         console.debug("Inlining " + config.url)
 
         try {
-            var xhr = new XMLHttpRequest();
-            xhr.responseType = isBinary ? "arraybuffer" : "text";
-            xhr.onreadystatechange = function () {
-                if (xhr.readyState == 4 && xhr.status == 200) {
-                    var contentType = this.getResponseHeader("content-type");
-                    callback(
-                        config.srcElement,
-                        config.resourceDeclaration,
-                        xhr.response,
-                        contentType);
-                }
-            };
-            xhr.open("GET", config.url);
-            xhr.send();
+            fetch(config.url)
+                .then(response => {
+                    return (isBinary ? response.blob() : response.text()).then(content => {
+                        callback(config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"));
+                    })
+                });
         }
         catch (error) {
             pageInlineSaver.handleError(error);
@@ -317,8 +306,7 @@ var pageInlineSaver = (function () {
 
     function completedInline() {
         pageInlineSaver.completedInlines++;
-        if (pageInlineSaver.foundInlinables == pageInlineSaver.initiatedInlines &&
-            pageInlineSaver.initiatedInlines == pageInlineSaver.completedInlines) {
+        if (pageInlineSaver.initiatedInlines == pageInlineSaver.completedInlines) {
             pageInlineSaver.saveFile();
         }
     }
