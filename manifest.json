@@ -3,10 +3,10 @@
   "name": "Page saver",
   "short_name": "PageSaver",
   "description": "Saves the current web page as one file with all external dependencies (style, script, images) downloaded and inlined",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "browser_action": {
     "default_icon": "img/icon128.png",
-    "default_popup":  "info.html"
+    "default_popup":  "info.html",
     "default_title":  "Page Saver"
   },
   "background": {
@@ -21,8 +21,8 @@
     "*://*/*"
   ],
   "content_security_policy": "script-src 'self'; object-src 'self'",
-  "icons": {
+  "icons": [{
     "128":  "img/icon128.png"
-  },
+  }],
   "options_page": "options.html"
 }
