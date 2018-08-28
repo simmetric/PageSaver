@@ -4,7 +4,7 @@ var pageInlineSaver = (function () {
     // @author Rob W <http://stackoverflow.com/users/938089/rob-w>
     // Demo: var serialized_html = DOMtoString(document);
     function DOMtoString(document_root) {
-        var html = '',
+        var html = "",
             node = document_root.firstChild;
         while (node) {
             switch (node.nodeType) {
@@ -15,14 +15,14 @@ var pageInlineSaver = (function () {
                     html += node.nodeValue;
                     break;
                 case Node.CDATA_SECTION_NODE:
-                    html += '<![CDATA[' + node.nodeValue + ']]>';
+                    html += "<![CDATA[" + node.nodeValue + "]]>";
                     break;
                 case Node.COMMENT_NODE:
-                    html += '<!--' + node.nodeValue + '-->';
+                    html += "<!--' + node.nodeValue + '-->";
                     break;
                 case Node.DOCUMENT_TYPE_NODE:
                     // (X)HTML documents are identified by public identifiers
-                    html += "<!DOCTYPE " + node.name + (node.publicId ? ' PUBLIC "' + node.publicId + '"' : '') + (!node.publicId && node.systemId ? ' SYSTEM' : '') + (node.systemId ? ' "' + node.systemId + '"' : '') + '>\n';
+                    html += "<!DOCTYPE " + node.name + (node.publicId ? " PUBLIC \"" + node.publicId + "\"" : "") + (!node.publicId && node.systemId ? " SYSTEM" : "") + (node.systemId ? " \"" + node.systemId + "\"" : "") + ">\n";
                     break;
             }
             node = node.nextSibling;
@@ -35,24 +35,31 @@ var pageInlineSaver = (function () {
         if (options.timeout > 0) {
             timeout = setTimeout(() => {
                 if (!pageInlineSaver.stopInlining) {
-                    pageInlineSaver.handleMessage("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
+                    console.info("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
                     pageInlineSaver.saveFile();
                 }
-            }, options.timeout * 1000)
+            }, options.timeout * 1000);
         }
         
-        //find all <link rel="stylesheet">, <style>, <script src=?> and <img src=> tags
+        //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
-            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet" });
+            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet"; });
             pageInlineSaver.increaseFoundInlineables(this.foundInlinables + linkTags.length);
         }
         if (options.inlineJs || options.removeJs) {
-            var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src") });
+            var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src"); });
             pageInlineSaver.increaseFoundInlineables(this.foundInlinables + scriptTags.length);
         }
         if (options.inlineImg) {
-            var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null });
+            var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null; });
+            imgTags.concat(findElements("embed", function (elm) { return elm.hasAttribute("src") && elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/"); }));
             pageInlineSaver.increaseFoundInlineables(this.foundInlinables + imgTags.length);
+
+            var sourceTags = findElements("source", function (elm) {
+                return elm.hasAttribute("srcset") && elm.getAttribute("srcset") &&
+                    (elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/") ||
+                    elm.parentElement.nodeName.toLowerCase() === "picture");
+            });
         }
 
         pageInlineSaver.handleMessage("Inlining " + this.foundInlinables + " external resources");
@@ -70,7 +77,7 @@ var pageInlineSaver = (function () {
                 if (options.inlineCss) {
                     for (let i = 0; i < linkTags.length; i++) {
                         //retrieve external file and inline into new <style> tag
-                        var url = linkTags[i].getAttribute("href");
+                        let url = linkTags[i].getAttribute("href");
 
                         pageInlineSaver.downloadResource({
                             url: url,
@@ -82,10 +89,10 @@ var pageInlineSaver = (function () {
                 }
 
                 if (options.inlineJs || options.removeJs) {
-                    for (var i = 0; i < scriptTags.length; i++) {
+                    for (let i = 0; i < scriptTags.length; i++) {
                         if (options.inlineJs && !options.removeJs) {
                             //retrieve external file and inline into new <script> tag without src attribute
-                            var url = scriptTags[i].getAttribute("src");
+                            let url = scriptTags[i].getAttribute("src");
 
                             pageInlineSaver.downloadResource({
                                 url: url,
@@ -101,31 +108,52 @@ var pageInlineSaver = (function () {
                 }
 
                 if (options.inlineImg) {
-                    for (var i = 0; i < imgTags.length; i++) {
-                        var url = imgTags[i].getAttribute("src");
+                    for (let i = 0; i < imgTags.length; i++) {
+                        let url = imgTags[i].getAttribute("src");
                         if (!url.startsWith("data:")) {
                             //retrieve external image and create data URI
                             pageInlineSaver.downloadResource({
-                                url: url,
-                                resourceDeclaration: imgTags[i]
-                            },
+                                    url: url,
+                                    resourceDeclaration: imgTags[i]
+                                },
                                 pageInlineSaver.inlineImage,
                                 true);
                         } else {
                             pageInlineSaver.completedInline();
                         }
                     }
+
+                    for (let i = 0; i < sourceTags.length; i++) {
+                        let urls = sourceTags[i].getAttribute("srcset").split(",");
+                        for (let j = 0; j < urls.length; j++) {
+                            let url = urls[j].split(" ")[0].trim();
+                            if (!url.startsWith("data:")) {
+                                pageInlineSaver.increaseFoundInlineables(1);
+                                pageInlineSaver.downloadResource({
+                                    url: url,
+                                    resourceDeclaration: url,
+                                    srcElement: sourceTags[i],
+                                    omitCssUrl: true
+                                },
+                                    pageInlineSaver.inlineStylesheetImage,
+                                    true);
+                            }
+                            else {
+                                pageInlineSaver.completedInline();
+                            }
+                        }
+                    }
                 }
             }
             catch (error) {
                 pageInlineSaver.handleError(error);
-                pageInlineSaver.clearTimeout(timeout);
+                clearTimeout(timeout);
                 pageInlineSaver.saveFile();
             }
         }
         else {
             //nothing left to inline, call saveFile
-            pageInlineSaver.clearTimeout(timeout);
+            clearTimeout(timeout);
             pageInlineSaver.saveFile();
         }
     }
@@ -144,14 +172,15 @@ var pageInlineSaver = (function () {
     function inlineImage(srcElement, resourceDeclaration, content, contentType) {
         //replace src attribute with base64 encoded image
         pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
-            resourceDeclaration.setAttribute("src", dataUrl);
+            let isSourceElement = resourceDeclaration.nodeName.toLowerCase() === "source";
+            resourceDeclaration.setAttribute(isSourceElement ? "srcset" : "src", dataUrl);
             pageInlineSaver.completedInline();
         });
     }
 
     function inlineStylesheet(srcElement, resourceDeclaration, content, contentType) {
         //create new element
-        var newElement = document.createElement("style");
+        let newElement = document.createElement("style");
         newElement.setAttribute("type", "text/css");
         newElement.innerHTML = content;
         newElement.setAttribute("href", resourceDeclaration.getAttribute("href"));
@@ -183,7 +212,7 @@ var pageInlineSaver = (function () {
                 //if relative URL, resolve to absolute based on stylesheet location
                 if (!match[1].startsWith("http") &&
                     !match[1].startsWith("/") &&
-                    baseUrl != undefined) {
+                    baseUrl !== undefined) {
                     url = relativeUrlToAbsolute(baseUrl, url);
                 }
 
@@ -204,11 +233,11 @@ var pageInlineSaver = (function () {
         var importPattern = /@import\s+"?'?([ a-zA-Z0-9:\-\.\\\/_&?=@]+)"?'?/gi;
         match = importPattern.exec(content);
         while (match) {
-            var url = match[1];
+            let url = match[1];
             //if relative URL, resolve to absolute based on stylesheet location
             if (!match[1].startsWith("http") &&
                 !match[1].startsWith("/") &&
-                baseUrl != undefined) {
+                baseUrl !== undefined) {
                 url = relativeUrlToAbsolute(baseUrl, url);
             }
 
@@ -225,21 +254,21 @@ var pageInlineSaver = (function () {
         }
     }
 
-    function inlineStylesheetImage(srcElement, originalUrl, content, contentType) {
+    function inlineStylesheetImage(srcElement, originalUrl, content, contentType, omitCssUrl = false) {
         pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
-            srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + dataUrl + ")"; })
+            srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return omitCssUrl ? dataUrl : "url(" + dataUrl + ")"; });
             pageInlineSaver.completedInline();
         });
 
     }
 
-    function inlineStylesheetImport(srcElement, importDeclaration, content, contentType) {
+    function inlineStylesheetImport(srcElement, importDeclaration, content, _contentType) {
         srcElement.innerHTML = srcElement.innerHTML.replace(importDeclaration, function () { return content; });
         pageInlineSaver.inlineStylesheetInternal(srcElement.innerHTML, srcElement);
         pageInlineSaver.completedInline();
     }
 
-    function getImageAsDataUrl(content, contentType, callback) {
+    function getImageAsDataUrl(content, _contentType, callback) {
 
         if (this.stopInlining) return;
 
@@ -248,7 +277,7 @@ var pageInlineSaver = (function () {
             reader.readAsDataURL(content);
             reader.onloadend = function () {
                 callback(reader.result);
-            }
+            };
         }
         catch (error) {
             pageInlineSaver.handleError(error);
@@ -261,7 +290,7 @@ var pageInlineSaver = (function () {
         var elements = document.getElementsByTagName(tagName);
         var filteredElements = [];
         for (var i = 0; i < elements.length; i++) {
-            if (filter == null || (typeof (filter) == 'function' && filter(elements[i]))) {
+            if (!filter || typeof filter === "function" && filter(elements[i])) {
                 filteredElements.push(elements[i]);
             }
         }
@@ -271,14 +300,18 @@ var pageInlineSaver = (function () {
 
     function downloadResource(config, callback, isBinary) {
         this.initiatedInlines++;
-        console.debug("Inlining " + config.url)
+        console.debug("Inlining " + config.url);
 
         try {
             fetch(config.url)
                 .then(response => {
                     return (isBinary ? response.blob() : response.text()).then(content => {
-                        callback(config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"));
-                    })
+                        callback(config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"), config.omitCssUrl ? config.omitCssUrl : false);
+                    });
+                })
+                .catch(reason => {
+                    pageInlineSaver.handleError(reason);
+                    pageInlineSaver.completedInline();
                 });
         }
         catch (error) {
@@ -294,9 +327,9 @@ var pageInlineSaver = (function () {
         stack.pop(); // remove current file name (or empty string)
         // (omit if "base" is the current folder without trailing slash)
         for (var i = 0; i < parts.length; i++) {
-            if (parts[i] == ".")
+            if (parts[i] === ".")
                 continue;
-            if (parts[i] == "..")
+            if (parts[i] === "..")
                 stack.pop();
             else
                 stack.push(parts[i]);
@@ -306,7 +339,7 @@ var pageInlineSaver = (function () {
 
     function completedInline() {
         pageInlineSaver.completedInlines++;
-        if (pageInlineSaver.initiatedInlines == pageInlineSaver.completedInlines) {
+        if (pageInlineSaver.initiatedInlines === pageInlineSaver.completedInlines) {
             pageInlineSaver.saveFile();
         }
     }
@@ -335,7 +368,7 @@ var pageInlineSaver = (function () {
     }
 
     function setBaseLink() {
-        if (document.getElementsByTagName("base").length == 0) {
+        if (document.getElementsByTagName("base").length === 0) {
             var base = document.createElement("base");
             base.setAttribute("href", window.location.href);
             document.head.appendChild(base);
@@ -350,7 +383,7 @@ var pageInlineSaver = (function () {
     }
 
     function handleError(error) {
-        document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += "<span style=\"color: #a00;\">An error occurred! Press Control+Shift+J to see what it is.</span><br>";
+        document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += "<span style=\"color: #a00;\">An error occurred! Press F12 to see what it is.</span><br>";
         console.error(error);
     }
 
@@ -395,7 +428,7 @@ try {
     dimmer.setAttribute("style", "position: fixed; z-index: 9998; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; opacity: 0.8");
     document.getElementsByTagName("body")[0].appendChild(dimmer);
 
-    var infoPanel = document.createElement("div")
+    var infoPanel = document.createElement("div");
     infoPanel.id = "SimmetricPageSaverInfoPanel";
     infoPanel.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 25%; width: 75%; height: 100%; color: #fff; text-align: left; font-size: 14pt;");
     document.getElementsByTagName("body")[0].appendChild(infoPanel);
@@ -417,7 +450,7 @@ try {
     pageInlineSaver.foundInlinables = 0;
 
     if (options.timeout > 0) {
-        pageInlineSaver.handleMessage("Timeout set to " + (options.timeout) + " seconds.");
+        pageInlineSaver.handleMessage("Timeout set to " + options.timeout + " seconds.");
     }
 
     if (options.addTimestamp) {

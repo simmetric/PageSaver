@@ -2,7 +2,7 @@ var menu = [];
 menu["test"] = chrome.contextMenus.create({
     "title": "Save page as one file",
     "contexts": ["page"],
-    "onclick": function (info, tab) {
+    "onclick": function () {
         saveInlinedPage();
     }
 });
@@ -11,23 +11,21 @@ var isActive = false;
 var animationIndex = 0;
 
 function saveInlinedPage() {
-    var options = getOptions();
     chrome.tabs.query(
         { currentWindow: true, active: true },
-        function(tabArray) {
+        function (tabArray) {
             startActivity();
             chrome.tabs.executeScript(tabArray[0].id, {
                 code: "var options = " + JSON.stringify(getOptions())
-            }, function() {
-                chrome.tabs.executeScript(tabArray[0].id,
-                    {
-                        file: "pageinlinesaver.js"
-                    },
-                    function(result) {
-                        if (chrome.runtime.lastError) {
-                            console.error(chrome.runtime.lastError);
-                        }
-                    });
+            }, function () {
+                chrome.tabs.executeScript(tabArray[0].id, {
+                    file: "pageinlinesaver.js"
+                },
+                function () {
+                    if (chrome.runtime.lastError) {
+                        console.error(chrome.runtime.lastError);
+                    }
+                });
             });
         }
     );
@@ -48,8 +46,7 @@ function saveFile(request) {
 
     chrome.downloads.download({
         url: URL.createObjectURL(blob),
-        filename: fileName + ".html",
-
+        filename: fileName + ".html"
     });
 }
 
@@ -63,15 +60,15 @@ function endActivity() {
 }
 
 function indicateActivity() {
-    if(chrome.browserAction !== undefined) {
+    if (chrome.browserAction !== undefined) {
         if (isActive) {
-            chrome.browserAction.setIcon({ path: "img/activity" + animationIndex + ".png" })
+            chrome.browserAction.setIcon({ path: "img/activity" + animationIndex + ".png" });
             if (++animationIndex > 3) {
                 animationIndex = 0;
             }
             window.setTimeout(indicateActivity, 300);
         } else {
-            chrome.browserAction.setIcon({ path: "img/icon128.png" })
+            chrome.browserAction.setIcon({ path: "img/icon128.png" });
             animationIndex = 0;
         }
     }
@@ -83,7 +80,7 @@ function getOption(name, defaultValue) {
         if (typeof value !== "undefined" && value !== null) {
             return value;
         }
-        
+
         return defaultValue;
     }
     catch (err) {
@@ -95,13 +92,14 @@ function getOption(name, defaultValue) {
 
 function getOptions() {
     return {
-        inlineJs : getOption("inlineJs", "true") === "true",
-        inlineCss : getOption("inlineCss", "true") === "true",
-        deepInlineCss : getOption("deepInlineCss", "true") === "true",
-        inlineImg : getOption("inlineImg", "true") === "true",
-        timeout : getOption("timeout", 30),
+        inlineJs: getOption("inlineJs", "true") === "true",
+        inlineCss: getOption("inlineCss", "true") === "true",
+        deepInlineCss: getOption("deepInlineCss", "true") === "true",
+        inlineImg: getOption("inlineImg", "true") === "true",
+        inlineMedia: getOption("inlineMedia", "true") === "true",
+        timeout: getOption("timeout", 30),
         addTimestamp: getOption("addTimestamp", "true") === "true",
-        removeJs : getOption("removeJs", "false") === "true"
+        removeJs: getOption("removeJs", "false") === "true"
     };
 }
 
@@ -115,8 +113,8 @@ function setOption(name, value) {
     }
 }
 
-chrome.runtime.onMessage.addListener(function (request, sender) {
-    if (request.action == "saveFile") {
+chrome.runtime.onMessage.addListener(function (request) {
+    if (request.action === "saveFile") {
         saveFile(request);
     }
 });
