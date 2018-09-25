@@ -43,7 +43,7 @@ var pageInlineSaver = (function () {
         
         //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
-            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet"; });
+            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel").toLowerCase() === "stylesheet"; });
             pageInlineSaver.increaseFoundInlineables(this.foundInlinables + linkTags.length);
         }
         if (options.inlineJs || options.removeJs) {
@@ -128,7 +128,7 @@ var pageInlineSaver = (function () {
                         for (let j = 0; j < urls.length; j++) {
                             let url = urls[j].split(" ")[0].trim();
                             if (!url.startsWith("data:")) {
-                                pageInlineSaver.increaseFoundInlineables(1);
+                                //pageInlineSaver.increaseFoundInlineables(1);
                                 pageInlineSaver.downloadResource({
                                     url: url,
                                     resourceDeclaration: url,
@@ -139,7 +139,7 @@ var pageInlineSaver = (function () {
                                     true);
                             }
                             else {
-                                pageInlineSaver.completedInline();
+                                //pageInlineSaver.completedInline();
                             }
                         }
                     }
@@ -311,12 +311,12 @@ var pageInlineSaver = (function () {
                 })
                 .catch(reason => {
                     pageInlineSaver.handleError(reason);
-                    pageInlineSaver.completedInline();
+                    //pageInlineSaver.completedInline();
                 });
         }
         catch (error) {
             pageInlineSaver.handleError(error);
-            pageInlineSaver.completedInline();
+            //pageInlineSaver.completedInline();
         }
     }
 
