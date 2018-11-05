@@ -44,26 +44,22 @@ var pageInlineSaver = (function () {
         //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
             var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel").toLowerCase() === "stylesheet"; });
-            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + linkTags.length);
         }
         if (options.inlineJs || options.removeJs) {
             var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src"); });
-            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + scriptTags.length);
         }
         if (options.inlineImg) {
             var imgTags = findElements("img", function (elm) { return elm.hasAttribute("src") && elm.getAttribute("src") !== null; });
-            imgTags.concat(findElements("embed", function (elm) { return elm.hasAttribute("src") && elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/"); }));
-            pageInlineSaver.increaseFoundInlineables(this.foundInlinables + imgTags.length);
 
-            var sourceTags = findElements("source", function (elm) {
+            imgTags.concat(findElements("embed", function (elm) { return elm.hasAttribute("src") && elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/"); }));
+
+            imgTags.concat(findElements("source", function (elm) {
                 return elm.hasAttribute("srcset") && elm.getAttribute("srcset") &&
                     (elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/") ||
                     elm.parentElement.nodeName.toLowerCase() === "picture");
-            });
+            }));
         }
 
-        pageInlineSaver.handleMessage("Inlining " + this.foundInlinables + " external resources");
-        
         if (options.deepInlineCss) {
             //inline stylesheet internal content
             var styleTags = findElements("style");
@@ -72,7 +68,10 @@ var pageInlineSaver = (function () {
             }
         }
 
-        if (this.foundInlinables > 0) {
+        var initialInlinableCount = linkTags.length + scriptTags.length + imgTags.length + (styleTags ? styleTags.length : 0);
+        pageInlineSaver.handleMessage("Inlining " + initialInlinableCount + " external resources");
+
+        if (initialInlinableCount > 0) {
             try {
                 if (options.inlineCss) {
                     for (let i = 0; i < linkTags.length; i++) {
@@ -80,9 +79,9 @@ var pageInlineSaver = (function () {
                         let url = linkTags[i].getAttribute("href");
 
                         pageInlineSaver.downloadResource({
-                            url: url,
-                            resourceDeclaration: linkTags[i]
-                        },
+                                url: url,
+                                resourceDeclaration: linkTags[i]
+                            },
                             pageInlineSaver.inlineStylesheet,
                             false);
                     }
@@ -95,9 +94,9 @@ var pageInlineSaver = (function () {
                             let url = scriptTags[i].getAttribute("src");
 
                             pageInlineSaver.downloadResource({
-                                url: url,
-                                resourceDeclaration: scriptTags[i]
-                            },
+                                    url: url,
+                                    resourceDeclaration: scriptTags[i]
+                                },
                                 pageInlineSaver.inlineScript,
                                 false);
                         }
@@ -109,37 +108,33 @@ var pageInlineSaver = (function () {
 
                 if (options.inlineImg) {
                     for (let i = 0; i < imgTags.length; i++) {
-                        let url = imgTags[i].getAttribute("src");
-                        if (!url.startsWith("data:")) {
-                            //retrieve external image and create data URI
-                            pageInlineSaver.downloadResource({
-                                    url: url,
-                                    resourceDeclaration: imgTags[i]
-                                },
-                                pageInlineSaver.inlineImage,
-                                true);
-                        } else {
-                            pageInlineSaver.completedInline();
-                        }
-                    }
-
-                    for (let i = 0; i < sourceTags.length; i++) {
-                        let urls = sourceTags[i].getAttribute("srcset").split(",");
-                        for (let j = 0; j < urls.length; j++) {
-                            let url = urls[j].split(" ")[0].trim();
+                        if (imgTags[i].hasAttribute("src")) {
+                            let url = imgTags[i].getAttribute("src");
                             if (!url.startsWith("data:")) {
-                                //pageInlineSaver.increaseFoundInlineables(1);
+                                //retrieve external image and create data URI
                                 pageInlineSaver.downloadResource({
-                                    url: url,
-                                    resourceDeclaration: url,
-                                    srcElement: sourceTags[i],
-                                    omitCssUrl: true
-                                },
-                                    pageInlineSaver.inlineStylesheetImage,
+                                        url: url,
+                                        resourceDeclaration: imgTags[i],
+                                        srcElement: "src"
+                                    },
+                                    pageInlineSaver.inlineImage,
                                     true);
                             }
-                            else {
-                                //pageInlineSaver.completedInline();
+                        }
+
+                        if (imgTags[i].hasAttribute("srcset")) {
+                            let urls = imgTags[i].getAttribute("srcset").trim().split(",");
+                            for (let j = 0; j < urls.length; j++) {
+                                let url = urls[j].trim().split(" ")[0].trim();
+                                if (!url.startsWith("data:")) {
+                                    pageInlineSaver.downloadResource({
+                                            url: url,
+                                            resourceDeclaration: imgTags[i],
+                                            srcElement: "srcset"
+                                        },
+                                        pageInlineSaver.inlineImage,
+                                        true);
+                                }
                             }
                         }
                     }
@@ -158,7 +153,7 @@ var pageInlineSaver = (function () {
         }
     }
 
-    function inlineScript(srcElement, resourceDeclaration, content, contentType) {
+    function inlineScript(_url, _srcElement, resourceDeclaration, content, _contentType) {
         //surround with CDATA
         content = "//<![CDATA[\n" + content.replace(new RegExp("<\/script>", "gi"), "&lt;/script&gt;") + "\n//]]>";
 
@@ -169,16 +164,21 @@ var pageInlineSaver = (function () {
         pageInlineSaver.completedInline();
     }
 
-    function inlineImage(srcElement, resourceDeclaration, content, contentType) {
+    function inlineImage(url, srcElement, resourceDeclaration, content, contentType) {
         //replace src attribute with base64 encoded image
         pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
-            let isSourceElement = resourceDeclaration.nodeName.toLowerCase() === "source";
-            resourceDeclaration.setAttribute(isSourceElement ? "srcset" : "src", dataUrl);
+            if (srcElement === "src") {
+                resourceDeclaration.setAttribute("src", dataUrl);
+            }
+            else if (srcElement === "srcset") {
+                resourceDeclaration.setAttribute("srcset", resourceDeclaration.getAttribute("srcset").replace(url, dataUrl));
+            }
+
             pageInlineSaver.completedInline();
         });
     }
 
-    function inlineStylesheet(srcElement, resourceDeclaration, content, contentType) {
+    function inlineStylesheet(url, srcElement, resourceDeclaration, content, contentType) {
         //create new element
         let newElement = document.createElement("style");
         newElement.setAttribute("type", "text/css");
@@ -216,7 +216,6 @@ var pageInlineSaver = (function () {
                     url = relativeUrlToAbsolute(baseUrl, url);
                 }
 
-                pageInlineSaver.increaseFoundInlineables(this.foundInlinables++);
                 pageInlineSaver.downloadResource({
                         url: url,
                         resourceDeclaration: match[0],
@@ -241,7 +240,6 @@ var pageInlineSaver = (function () {
                 url = relativeUrlToAbsolute(baseUrl, url);
             }
 
-            pageInlineSaver.increaseFoundInlineables(pageInlineSaver.foundInlinables++);
             pageInlineSaver.downloadResource({
                     url: url,
                     resourceDeclaration: match[0],
@@ -254,17 +252,18 @@ var pageInlineSaver = (function () {
         }
     }
 
-    function inlineStylesheetImage(srcElement, originalUrl, content, contentType, omitCssUrl = false) {
+    function inlineStylesheetImage(url, srcElement, originalUrl, content, contentType) {
         pageInlineSaver.getImageAsDataUrl(content, contentType, function (dataUrl) {
-            srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return omitCssUrl ? dataUrl : "url(" + dataUrl + ")"; });
+            srcElement.innerHTML = srcElement.innerHTML.replace(originalUrl, function () { return "url(" + dataUrl + ")"; });
+
             pageInlineSaver.completedInline();
         });
-
     }
 
-    function inlineStylesheetImport(srcElement, importDeclaration, content, _contentType) {
+    function inlineStylesheetImport(url, srcElement, importDeclaration, content, _contentType) {
         srcElement.innerHTML = srcElement.innerHTML.replace(importDeclaration, function () { return content; });
         pageInlineSaver.inlineStylesheetInternal(srcElement.innerHTML, srcElement);
+
         pageInlineSaver.completedInline();
     }
 
@@ -299,24 +298,22 @@ var pageInlineSaver = (function () {
     }
 
     function downloadResource(config, callback, isBinary) {
-        this.initiatedInlines++;
+        pageInlineSaver.initiatedInlines++;
         console.debug("Inlining " + config.url);
 
         try {
             fetch(config.url)
                 .then(response => {
                     return (isBinary ? response.blob() : response.text()).then(content => {
-                        callback(config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"), config.omitCssUrl ? config.omitCssUrl : false);
+                        callback(config.url, config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"));
                     });
                 })
                 .catch(reason => {
                     pageInlineSaver.handleError(reason);
-                    //pageInlineSaver.completedInline();
                 });
         }
         catch (error) {
             pageInlineSaver.handleError(error);
-            //pageInlineSaver.completedInline();
         }
     }
 
@@ -391,9 +388,9 @@ var pageInlineSaver = (function () {
         document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += message + "<br>";
     }
 
-    function increaseFoundInlineables(newValue) {
-        document.getElementById("SimmetricPageSaverInlineableCounter").innerText = newValue;
-        pageInlineSaver.foundInlinables = newValue;
+    function increaseFoundInlineables(numberToAdd) {
+        document.getElementById("SimmetricPageSaverInlineableCounter").innerText += numberToAdd;
+        pageInlineSaver.foundInlinables += numberToAdd;
     }
 
     return {
@@ -425,23 +422,23 @@ var pageInlineSaver = (function () {
 try {
     var dimmer = document.createElement("div");
     dimmer.id = "SimmetricPageSaverDimmer";
-    dimmer.setAttribute("style", "position: fixed; z-index: 9998; top: 0; left: 0; width: 100%; height: 100%; background-color: #000; opacity: 0.8");
+    dimmer.setAttribute("style", "position: fixed; z-index: 9998; top: 0; left: 0; width: 100%; height: 100%; background-color: #fff; opacity: 0.8");
     document.getElementsByTagName("body")[0].appendChild(dimmer);
 
     var infoPanel = document.createElement("div");
     infoPanel.id = "SimmetricPageSaverInfoPanel";
-    infoPanel.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 25%; width: 75%; height: 100%; color: #fff; text-align: left; font-size: 14pt;");
+    infoPanel.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 25%; width: 75%; height: 100%; color: #000; text-align: left; font-size: 14pt;");
     document.getElementsByTagName("body")[0].appendChild(infoPanel);
 
     var inlineableCounter = document.createElement("div");
     inlineableCounter.id = "SimmetricPageSaverInlineableCounter";
-    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; background-color: #fff; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right; float: left;");
+    inlineableCounter.setAttribute("style", "position: fixed; z-index: 9999; top: 0; left: 0; width: 100px; height: 50px; color: #000; font-size: 50px; font-weight: bold; padding: 20px; text-align: right; float: left;");
     document.getElementsByTagName("body")[0].appendChild(inlineableCounter);
 
     var stopButton = document.createElement("button");
     stopButton.id = "SimmetricPageSaverStopButton";
     stopButton.onclick = pageInlineSaver.saveFile;
-    stopButton.setAttribute("style", "position: fixed; z-index: 9999; left: 0; bottom: 0; width: 200px; height: 80px; background-color: #a66; color: $fff;");
+    stopButton.setAttribute("style", "position: fixed; z-index: 9999; left: 0; bottom: 0; width: 200px; height: 80px; background-color: #aaa; color: 000;");
     stopButton.innerText = "Interrupt and save page now";
     document.getElementsByTagName("body")[0].appendChild(stopButton);
 
