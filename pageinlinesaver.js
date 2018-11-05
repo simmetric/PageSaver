@@ -64,14 +64,22 @@ var pageInlineSaver = (function () {
             //inline stylesheet internal content
             var styleTags = findElements("style");
             for (let i = 0; i < styleTags.length; i++) {
-                pageInlineSaver.inlineStylesheetInternal(styleTags[i].innerText, document.getElementsByTagName("base")[0]);
+                pageInlineSaver.inlineStylesheetInternal(styleTags[i].innerText, styleTags[i]);
+            }
+
+            var styleAttributes = queryElements("[style]");
+            for (let i = 0; i < styleAttributes.length; i++) {
+                pageInlineSaver.inlineStylesheetInternal(styleAttributes[i].getAttribute("style"), styleAttributes[i]);
             }
         }
 
-        var initialInlinableCount = linkTags.length + scriptTags.length + imgTags.length + (styleTags ? styleTags.length : 0);
-        pageInlineSaver.handleMessage("Inlining " + initialInlinableCount + " external resources");
+        var initialInlineableCount = linkTags.length + scriptTags.length + imgTags.length +
+            (styleTags ? styleTags.length : 0) +
+            (styleAttributes ? styleAttributes.length : 0);
+        pageInlineSaver.handleMessage("Inlining " + initialInlineableCount + " external resources");
+        pageInlineSaver.increaseFoundInlineables(initialInlineableCount);
 
-        if (initialInlinableCount > 0) {
+        if (initialInlineableCount > 0) {
             try {
                 if (options.inlineCss) {
                     for (let i = 0; i < linkTags.length; i++) {
@@ -200,7 +208,7 @@ var pageInlineSaver = (function () {
     }
 
     function inlineStylesheetInternal(content, srcElement) {
-        var baseUrl = srcElement.getAttribute("href");
+        var baseUrl = document.getElementsByTagName("base")[0].getAttribute("href");
         //search CSS for url() occurrences and inline them. they will be replaced in the page source
         var urlPattern = /url\("?'?([ a-zA-Z0-9:\-\.\\\/_&?=@]+)"?'?\)/gi;
         var match = urlPattern.exec(content);
@@ -297,7 +305,15 @@ var pageInlineSaver = (function () {
         return filteredElements;
     }
 
+    function queryElements(query) {
+        return document.querySelectorAll(query);
+    }
+
     function downloadResource(config, callback, isBinary) {
+        if (config.url.startsWith("//")) {
+            config.url = location.href.split("/")[0] + config.url;
+        }
+
         pageInlineSaver.initiatedInlines++;
         console.debug("Inlining " + config.url);
 
@@ -388,9 +404,8 @@ var pageInlineSaver = (function () {
         document.getElementById("SimmetricPageSaverInfoPanel").innerHTML += message + "<br>";
     }
 
-    function increaseFoundInlineables(numberToAdd) {
-        document.getElementById("SimmetricPageSaverInlineableCounter").innerText += numberToAdd;
-        pageInlineSaver.foundInlinables += numberToAdd;
+    function increaseFoundInlineables(totalInlineablesCount) {
+        document.getElementById("SimmetricPageSaverInlineableCounter").innerText = totalInlineablesCount;
     }
 
     return {
