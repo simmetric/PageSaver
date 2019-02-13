@@ -43,7 +43,7 @@ var pageInlineSaver = (function () {
         
         //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
-            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel") === "stylesheet"; });
+            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel").toLowerCase() === "stylesheet"; });
             pageInlineSaver.increaseFoundInlineables(this.foundInlinables + linkTags.length);
         }
         if (options.inlineJs || options.removeJs) {
