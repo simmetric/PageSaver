@@ -12,21 +12,23 @@ var animationIndex = 0;
 
 function saveInlinedPage() {
     chrome.tabs.query(
-        { currentWindow: true, active: true },
+        { active: true },
         function (tabArray) {
-            startActivity();
-            chrome.tabs.executeScript(tabArray[0].id, {
-                code: "var options = " + JSON.stringify(getOptions())
-            }, function () {
+            if (tabArray) {
+                startActivity();
                 chrome.tabs.executeScript(tabArray[0].id, {
-                    file: "pageinlinesaver.js"
-                },
-                function () {
-                    if (chrome.runtime.lastError) {
-                        console.error(chrome.runtime.lastError);
-                    }
+                    code: "var options = " + JSON.stringify(getOptions())
+                }, function () {
+                    chrome.tabs.executeScript(tabArray[0].id, {
+                        file: "js/pageinlinesaver.js"
+                    },
+                        function () {
+                            if (chrome.runtime.lastError) {
+                                console.error(chrome.runtime.lastError);
+                            }
+                        });
                 });
-            });
+            }
         }
     );
 }
@@ -116,5 +118,8 @@ function setOption(name, value) {
 chrome.runtime.onMessage.addListener(function (request) {
     if (request.action === "saveFile") {
         saveFile(request);
+    }
+    else if (request.action === "startInline") {
+        saveInlinedPage();
     }
 });

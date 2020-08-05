@@ -1,6 +1,6 @@
 var pageInlineSaver = (function () {
     "use strict";
-    
+
     // @author Rob W <http://stackoverflow.com/users/938089/rob-w>
     // Demo: var serialized_html = DOMtoString(document);
     function DOMtoString(document_root) {
@@ -40,7 +40,7 @@ var pageInlineSaver = (function () {
                 }
             }, options.timeout * 1000);
         }
-        
+
         //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
             var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel").toLowerCase() === "stylesheet"; });
@@ -56,7 +56,7 @@ var pageInlineSaver = (function () {
             imgTags.concat(findElements("source", function (elm) {
                 return elm.hasAttribute("srcset") && elm.getAttribute("srcset") &&
                     (elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/") ||
-                    elm.parentElement.nodeName.toLowerCase() === "picture");
+                        elm.parentElement.nodeName.toLowerCase() === "picture");
             }));
         }
 
@@ -87,9 +87,10 @@ var pageInlineSaver = (function () {
                         let url = linkTags[i].getAttribute("href");
 
                         pageInlineSaver.downloadResource({
-                                url: url,
-                                resourceDeclaration: linkTags[i]
-                            },
+                            url: url,
+                            baseUrl: new URL(location.href).origin,
+                            resourceDeclaration: linkTags[i]
+                        },
                             pageInlineSaver.inlineStylesheet,
                             false);
                     }
@@ -102,9 +103,10 @@ var pageInlineSaver = (function () {
                             let url = scriptTags[i].getAttribute("src");
 
                             pageInlineSaver.downloadResource({
-                                    url: url,
-                                    resourceDeclaration: scriptTags[i]
-                                },
+                                url: url,
+                                baseUrl: new URL(location.href).origin,
+                                resourceDeclaration: scriptTags[i]
+                            },
                                 pageInlineSaver.inlineScript,
                                 false);
                         }
@@ -121,10 +123,11 @@ var pageInlineSaver = (function () {
                             if (!url.startsWith("data:")) {
                                 //retrieve external image and create data URI
                                 pageInlineSaver.downloadResource({
-                                        url: url,
-                                        resourceDeclaration: imgTags[i],
-                                        srcElement: "src"
-                                    },
+                                    url: url,
+                                    baseUrl: new URL(location.href).origin,
+                                    resourceDeclaration: imgTags[i],
+                                    srcElement: "src"
+                                },
                                     pageInlineSaver.inlineImage,
                                     true);
                             }
@@ -136,10 +139,11 @@ var pageInlineSaver = (function () {
                                 let url = urls[j].trim().split(" ")[0].trim();
                                 if (!url.startsWith("data:")) {
                                     pageInlineSaver.downloadResource({
-                                            url: url,
-                                            resourceDeclaration: imgTags[i],
-                                            srcElement: "srcset"
-                                        },
+                                        url: url,
+                                        baseUrl: new URL(location.href).origin,
+                                        resourceDeclaration: imgTags[i],
+                                        srcElement: "srcset"
+                                    },
                                         pageInlineSaver.inlineImage,
                                         true);
                                 }
@@ -208,27 +212,39 @@ var pageInlineSaver = (function () {
     }
 
     function inlineStylesheetInternal(content, srcElement) {
-        var baseUrl = document.getElementsByTagName("base")[0].getAttribute("href");
+        var rootUrl = new URL(location.href).origin;
+        var baseUrl = undefined;
+        if (srcElement.hasAttribute("href")) {
+            baseUrl = srcElement.getAttribute("href");
+        }
+        if (srcElement.hasAttribute("src")) {
+            baseUrl = srcElement.getAttribute("src");
+        }
+        if (baseUrl && baseUrl.startsWith("/")) {
+            baseUrl = rootUrl + baseUrl;
+        }
+        if (baseUrl && baseUrl.startsWith(".")) {
+            baseUrl = relativeUrlToAbsolute(rootUrl,)
+        }
+        if (baseUrl === undefined) {
+            document.getElementsByTagName("base")[0].getAttribute("href");
+        }
+        if (baseUrl === undefined) {
+            baseUrl = new URL(location.href).origin;
+        }
         //search CSS for url() occurrences and inline them. they will be replaced in the page source
         var urlPattern = /url\("?'?([ a-zA-Z0-9:\-\.\\\/_&?=@]+)"?'?\)/gi;
         var match = urlPattern.exec(content);
         while (match) {
+            let url = match[1];
             //avoid urls that are already inlined
             if (!match[1].startsWith("data:")) {
-
-                var url = match[1];
-                //if relative URL, resolve to absolute based on stylesheet location
-                if (!match[1].startsWith("http") &&
-                    !match[1].startsWith("/") &&
-                    baseUrl !== undefined) {
-                    url = relativeUrlToAbsolute(baseUrl, url);
-                }
-
                 pageInlineSaver.downloadResource({
-                        url: url,
-                        resourceDeclaration: match[0],
-                        srcElement: srcElement
-                    },
+                    url: url,
+                    baseUrl,
+                    resourceDeclaration: match[0],
+                    srcElement: srcElement
+                },
                     pageInlineSaver.inlineStylesheetImage,
                     true);
             }
@@ -241,18 +257,13 @@ var pageInlineSaver = (function () {
         match = importPattern.exec(content);
         while (match) {
             let url = match[1];
-            //if relative URL, resolve to absolute based on stylesheet location
-            if (!match[1].startsWith("http") &&
-                !match[1].startsWith("/") &&
-                baseUrl !== undefined) {
-                url = relativeUrlToAbsolute(baseUrl, url);
-            }
 
             pageInlineSaver.downloadResource({
-                    url: url,
-                    resourceDeclaration: match[0],
-                    srcElement: srcElement
-                },
+                url: url,
+                baseUrl,
+                resourceDeclaration: match[0],
+                srcElement: srcElement
+            },
                 pageInlineSaver.inlineStylesheetImport,
                 false);
 
@@ -276,7 +287,6 @@ var pageInlineSaver = (function () {
     }
 
     function getImageAsDataUrl(content, _contentType, callback) {
-
         if (this.stopInlining) return;
 
         try {
@@ -310,15 +320,19 @@ var pageInlineSaver = (function () {
     }
 
     function downloadResource(config, callback, isBinary) {
-        if (config.url.startsWith("//")) {
-            config.url = location.href.split("/")[0] + config.url;
+        //resolve URL        
+        if (!config.url.startsWith("http")) {
+            config.url = new URL(config.url, config.baseUrl);
         }
 
         pageInlineSaver.initiatedInlines++;
         console.debug("Inlining " + config.url);
 
         try {
-            fetch(config.url)
+            fetch(config.url, {
+                credentials: "include",
+                mode: "cors"
+            })
                 .then(response => {
                     return (isBinary ? response.blob() : response.text()).then(content => {
                         callback(config.url, config.srcElement, config.resourceDeclaration, content, response.headers.get("Content-Type"));
