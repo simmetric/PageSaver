@@ -35,7 +35,7 @@ var pageInlineSaver = (function () {
         if (options.timeout > 0) {
             timeout = setTimeout(() => {
                 if (!pageInlineSaver.stopInlining) {
-                    console.info("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.foundInlinables + " found inlinables");
+                    console.info("Timeout reached: saving page with " + (this.initiatedInlines - this.completedInlines) + " inlines left unfinished out of " + this.initiatedInlines + " found inlinables");
                     pageInlineSaver.saveFile();
                 }
             }, options.timeout * 1000);
@@ -43,7 +43,7 @@ var pageInlineSaver = (function () {
 
         //find all <link rel="stylesheet">, <style>, <script src=?>, <img src=>, <source>, <video> and <audio> tags
         if (options.inlineCss) {
-            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel").toLowerCase() === "stylesheet"; });
+            var linkTags = findElements("link", function (elm) { return elm.getAttribute("rel")?.toLowerCase() === "stylesheet"; });
         }
         if (options.inlineJs || options.removeJs) {
             var scriptTags = findElements("script", function (elm) { return elm.hasAttribute("src"); });
@@ -56,7 +56,7 @@ var pageInlineSaver = (function () {
             imgTags.concat(findElements("source", function (elm) {
                 return elm.hasAttribute("srcset") && elm.getAttribute("srcset") &&
                     (elm.hasAttribute("type") && elm.getAttribute("type").startsWith("image/") ||
-                        elm.parentElement.nodeName.toLowerCase() === "picture");
+                        elm.parentElement.nodeName?.toLowerCase() === "picture");
             }));
         }
 
@@ -224,7 +224,7 @@ var pageInlineSaver = (function () {
             baseUrl = rootUrl + baseUrl;
         }
         if (baseUrl && baseUrl.startsWith(".")) {
-            baseUrl = relativeUrlToAbsolute(rootUrl,)
+            baseUrl = new URL(baseUrl, rootUrl).href;
         }
         if (baseUrl === undefined) {
             document.getElementsByTagName("base")[0].getAttribute("href");
@@ -345,23 +345,6 @@ var pageInlineSaver = (function () {
         catch (error) {
             pageInlineSaver.handleError(error);
         }
-    }
-
-    //@author Bergi <http://stackoverflow.com/users/1048572/bergi>
-    function relativeUrlToAbsolute(base, relativeUrl) {
-        var stack = base.split("/"),
-            parts = relativeUrl.split("/");
-        stack.pop(); // remove current file name (or empty string)
-        // (omit if "base" is the current folder without trailing slash)
-        for (var i = 0; i < parts.length; i++) {
-            if (parts[i] === ".")
-                continue;
-            if (parts[i] === "..")
-                stack.pop();
-            else
-                stack.push(parts[i]);
-        }
-        return stack.join("/");
     }
 
     function completedInline() {

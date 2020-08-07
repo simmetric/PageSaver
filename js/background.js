@@ -12,7 +12,7 @@ var animationIndex = 0;
 
 function saveInlinedPage() {
     chrome.tabs.query(
-        { active: true },
+        { active: true, currentWindow: true },
         function (tabArray) {
             if (tabArray) {
                 startActivity();
